@@ -1,0 +1,29 @@
+body, input, button {
+	font-size: 20px;
+}
+
+label {
+	display: block;
+}
+
+label span {
+	display: block;
+}
+
+#alarm_set { 
+	display: none;
+	font: 30px/1em monospace;
+}
+
+#flash {
+	font: 18px/1em monospace;
+	margin: 0 0 5px;
+	background: #eee;
+	padding: 6px;
+}
+
+@media (max-device-width: 480px) {
+	pre {
+		font-size: 14px;
+	}
+}

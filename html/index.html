@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, user-scalable=no">
+	<meta name="apple-mobile-web-app-capable" content="yes">
+	<title>Alarm Clock</title>
+	<link rel="stylesheet" href="css/reset.css">
+	<link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+
+
+<label>
+	<span>Alarm</span>
+	<input type="time" id="alarm">
+</label>
+
+<div id="alarm_set">Alarm <span></span></div>
+
+<div style="margin:0 0 10px;">
+	<button id="set">Set</button>
+	<button id="test">Test</button>
+	<button id="powernap">Power nap</button>
+	<button id="stop" style="display:none;">Stop</button>
+	<!--<button id="awake" style="display:none;">I'm awake!</button>
+	<span id="awake_ticker"></span>-->
+</div>
+
+<div id="flash"></div>
+<pre id="status" class="loading">Loading...</pre>
+
+<script src="jslib/jquery/jquery.min.js"></script>
+<script src="socket.io/socket.io.js"></script>
+<script src="js/date.format.js"></script>
+<script src="jslib/fastclick/fastclick.js"></script>
+<script src="jslib/moment/moment.min.js"></script>
+<script src="jslib/string/string.min.js"></script>
+<script>
+
+var socket = io.connect(/*'http://10.0.0.1:1337'*/);
+
+(function () {
+	var timer,
+			$flash = $('#flash');
+
+	window.flashMessage = function (msg) {
+		$flash.text(msg).css({opacity:1});
+
+		clearTimeout(timer);
+		timer = setTimeout(function () {
+			$flash.animate({opacity:0});
+		}, 5000);
+	};
+}());
+
+function log(status, date) {
+	date = date || new Date();
+	$('#status').prepend('[' + date.format('d mmm HH:MM') + '] ' + status + '\n');
+}
+
+function alarm_was_set(time) {
+	$('#alarm').val(time).parent().hide();
+	$('#alarm_set span').text(time).parent().show();
+	$('#set').hide();
+	$('#powernap').hide();
+	$('#test').hide();
+	$('#stop').show();
+}
+
+socket.on('init', function (data) {
+	if ($('#status').hasClass('loading')) {
+		$('#status').removeClass('loading').html('');
+		
+		$.each(data.logHistory, function () {
+			log(this[0], new Date(this[1]));
+		});
+		
+		log('Connected');
+	}
+	
+	if (data.lastAlarmStr) {
+		$('#alarm').val(data.lastAlarmStr);
+	}
+	
+	if (data.alarmSet) {
+		alarm_was_set(data.lastAlarmStr);
+	}
+	
+	if (data.triggered) {
+		$('#stop').show();
+	}
+
+	flashMessage('Server time is ' + moment(data.now).format('HH:mm'));
+	
+	/*if (data.canVerifyAwake) {
+		$('#awake').show().removeAttr('disabled');
+	} else {
+		$('#awake').hide();
+	}*/
+});
+
+/*socket.on('disconnect', function () {
+	log('Disconnected');
+});*/
+
+socket.on('connect_failed', function () {
+	log("Couldn't connect");
+});
+
+socket.on('log', function (msg) {
+	log(msg);
+});
+
+socket.on('set', function (data) {
+	var diff = moment(data.nextAlarm).diff(data.now),
+			diffSec = diff / 1000;
+	alarm_was_set(data.string);
+//	flashMessage(S().capitalize() + ' left');
+
+	flashMessage(Math.floor(diffSec / 3600) + ':' + pad(Math.floor(diffSec % 3600 / 60), 2) + ' left');
+//	flashMessage(S(moment(data.nextAlarm).from(data.now, true)).capitalize() + ' left');
+	//log('Set to ' + $('#alarm').val());
+});
+
+socket.on('test', function (data) {
+	$('#stop').show();
+	$('#set').hide();
+	$('#powernap').hide();
+	$('#test').hide();
+	$('#alarm').parent().hide();
+});
+
+
+
+socket.on('triggered', function () {
+	//log('Triggered');
+	//$('#stop').show();
+	//$('#awake').hide();
+});
+
+socket.on('stop', function () {
+	//log('Stopped');
+	flashMessage('Stopped');
+	$('#stop').hide();
+	$('#set').show();
+	$('#powernap').show();
+	$('#test').show();
+	$('#alarm').parent().show();
+	$('#alarm_set').hide();
+});
+
+/*socket.on('verifyAwake', function () {
+	$('#awake').show().removeAttr('disabled');
+});
+
+socket.on('canVerifyAwakeIn', function (ms) {
+	$('#awake').show().attr('disabled', 'disabled');
+	var end = new Date().getTime() + ms;
+	var interval = setInterval(function () {
+		if (end > new Date().getTime()) {
+			$('#awake_ticker').text(Math.floor((end - new Date().getTime()) / 1000) + ' seconds left');
+		} else {
+			$('#awake_ticker').text('');
+			clearInterval(interval);
+		}
+	}, 1000);
+});
+
+$('#awake').click(function () {
+	socket.emit('awake');
+	$(this).hide();
+});*/
+
+$('#set').click(function () {
+	flashMessage('Setting..');
+	socket.emit('set', { time: $('#alarm').val() });
+});
+
+$('#test').click(function () {
+	socket.emit('test');
+});
+
+$('#stop').click(function () {
+	flashMessage('Stopping..');
+	socket.emit('stop');
+});
+
+$('#powernap').click(function () {
+    var date, minutes;
+    minutes = prompt('Power nap length? (minutes)', 20);
+    
+    if (minutes) {
+	    date = new Date(new Date().getTime() + 60 * parseInt(minutes, 10) * 1000);
+	    socket.emit('set', { time: date.format('HH:MM') });
+	}
+});
+
+window.addEventListener('load', function() {
+    new FastClick(document.body);
+}, false);
+
+function pad(n, width, z) {
+	z = z || '0';
+	n = n + '';
+	return n.length >= width ? n : new Array(width - n.length + 1).join(z) + n;
+}
+
+</script>
+</body>
+</html>
